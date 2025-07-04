@@ -38,4 +38,66 @@
   <script>
     const API_KEY = 'aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmE1YjlmNjJjLTkxNjAtNDk5Zi1iODM1LTg4ZTJkZDM5N2IwMDo6JGFhY2hfNzEwODYzZmQtODM0Yy00NWU0LTllMzAtOTMwOTU3ZWMzNzdj';
 
-    document.getElementById('payment-form').addEventLis
+    document.getElementById('payment-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const responseBox = document.getElementById('response');
+      responseBox.innerText = 'Gerando link de pagamento...';
+
+      const name = document.getElementById('name').value;
+      const email = document.getElementById('email').value;
+      const cpf = document.getElementById('cpf').value;
+      const phone = document.getElementById('phone').value;
+      const amount = parseFloat(document.getElementById('amount').value);
+
+      try {
+        // 1. Criar cliente
+        const customerRes = await fetch('https://api-sandbox.asaas.com/v3/customers', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'access_token': API_KEY
+          },
+          body: JSON.stringify({
+            name,
+            email,
+            cpfCnpj: cpf,
+            phone
+          })
+        });
+
+        const customerData = await customerRes.json();
+        if (!customerRes.ok) throw new Error(customerData.errors?.[0]?.description || 'Erro ao criar cliente');
+
+        const customerId = customerData.id;
+
+        // 2. Criar pagamento com checkoutUrl
+        const paymentRes = await fetch('https://api-sandbox.asaas.com/v3/payments', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'access_token': API_KEY
+          },
+          body: JSON.stringify({
+            customer: customerId,
+            billingType: 'CREDIT_CARD',
+            value: amount,
+            dueDate: new Date().toISOString().split('T')[0],
+            description: 'Pagamento com cartão via checkout',
+            remoteIp: '127.0.0.1' // necessário no sandbox
+          })
+        });
+
+        const paymentData = await paymentRes.json();
+        if (!paymentRes.ok) throw new Error(paymentData.errors?.[0]?.description || 'Erro ao criar pagamento');
+
+        // 3. Redirecionar para o checkout seguro
+        responseBox.innerHTML = 'Redirecionando para o checkout...';
+        window.location.href = paymentData.invoiceUrl;
+
+      } catch (err) {
+        responseBox.innerText = `❌ ${err.message}`;
+      }
+    });
+  </script>
+</body>
+</html>
