@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pagamento com Cartão2 - Checkout Asaas</title>
+  <title>Pagamento com Cartão - Asaas</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.asaas.com/v2/checkout.js"></script>
 </head>
 <body class="bg-gray-100 flex items-center justify-center min-h-screen">
   <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md">
-    <h1 class="text-2xl font-bold mb-6 text-center">Pagamento</h1>
+    <h1 class="text-2xl font-bold mb-6 text-center">Pagamento com Cartão</h1>
+    
+    <!-- Formulário de Dados do Cliente -->
     <form id="payment-form" class="space-y-4">
       <div>
         <label class="block mb-1 font-medium">Nome completo</label>
@@ -30,19 +33,29 @@
         <label class="block mb-1 font-medium">Valor (R$)</label>
         <input type="number" id="amount" class="w-full p-2 border rounded-xl" required />
       </div>
-      <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition">Pagar com Cartão</button>
+      
+      <!-- Campos do Cartão (Tokenização) -->
+      <div id="card-element" class="p-3 border rounded-xl"></div>
+      
+      <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded-xl hover:bg-blue-700 transition">
+        Pagar com Cartão
+      </button>
     </form>
+    
+    <!-- Mensagem de Resposta -->
     <div id="response" class="mt-4 text-sm text-gray-700"></div>
   </div>
 
   <script>
-    const API_KEY = 'aact_prod_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmE1YjlmNjJjLTkxNjAtNDk5Zi1iODM1LTg4ZTJkZDM5N2IwMDo6JGFhY2hfNzEwODYzZmQtODM0Yy00NWU0LTllMzAtOTMwOTU3ZWMzNzdj';
+    // Substitua pela sua API Key (NÃO use isso em produção!)
+    const API_KEY = 'sua_api_key_aqui_sandbox_ou_prod';
 
     document.getElementById('payment-form').addEventListener('submit', async function (e) {
       e.preventDefault();
       const responseBox = document.getElementById('response');
-      responseBox.innerText = 'Gerando link de pagamento...';
+      responseBox.innerHTML = 'Processando pagamento...';
 
+      // Dados do cliente
       const name = document.getElementById('name').value;
       const email = document.getElementById('email').value;
       const cpf = document.getElementById('cpf').value;
@@ -50,7 +63,7 @@
       const amount = parseFloat(document.getElementById('amount').value);
 
       try {
-        // 1. Criar cliente
+        // 1. Criar cliente na Asaas
         const customerRes = await fetch('https://api-sandbox.asaas.com/v3/customers', {
           method: 'POST',
           headers: {
@@ -68,9 +81,7 @@
         const customerData = await customerRes.json();
         if (!customerRes.ok) throw new Error(customerData.errors?.[0]?.description || 'Erro ao criar cliente');
 
-        const customerId = customerData.id;
-
-        // 2. Criar pagamento com checkoutUrl
+        // 2. Criar pagamento com cartão (tokenização)
         const paymentRes = await fetch('https://api-sandbox.asaas.com/v3/payments', {
           method: 'POST',
           headers: {
@@ -78,24 +89,41 @@
             'access_token': API_KEY
           },
           body: JSON.stringify({
-            customer: customerId,
+            customer: customerData.id,
             billingType: 'CREDIT_CARD',
             value: amount,
             dueDate: new Date().toISOString().split('T')[0],
-            description: 'Pagamento com cartão via checkout',
-            remoteIp: '127.0.0.1' // necessário no sandbox
+            description: 'Pagamento via cartão',
+            creditCard: {
+              holderName: name,
+              number: '4111111111111111', // Número de teste (sandbox)
+              expiryMonth: '12',
+              expiryYear: '2030',
+              ccv: '123'
+            },
+            creditCardHolderInfo: {
+              name,
+              email,
+              cpfCnpj: cpf,
+              postalCode: '80000000', // Necessário para evitar 3DS em alguns casos
+              addressNumber: '123',
+              phone
+            }
           })
         });
 
         const paymentData = await paymentRes.json();
-        if (!paymentRes.ok) throw new Error(paymentData.errors?.[0]?.description || 'Erro ao criar pagamento');
+        if (!paymentRes.ok) throw new Error(paymentData.errors?.[0]?.description || 'Erro no pagamento');
 
-        // 3. Redirecionar para o checkout seguro
-        responseBox.innerHTML = 'Redirecionando para o checkout...';
-        window.location.href = paymentData.invoiceUrl;
+        // 3. Mostrar confirmação
+        responseBox.innerHTML = `
+          <p class="text-green-600">✅ Pagamento aprovado!</p>
+          <p>ID: ${paymentData.id}</p>
+          <p>Valor: R$ ${paymentData.value.toFixed(2)}</p>
+        `;
 
       } catch (err) {
-        responseBox.innerText = `❌ ${err.message}`;
+        responseBox.innerHTML = `❌ Erro: ${err.message}`;
       }
     });
   </script>
